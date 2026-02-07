@@ -1,55 +1,46 @@
-FROM nvidia/cuda:10.2-cudnn7-devel-ubuntu18.04
+# ============================================
+# Base Image: PyTorch 2.1.0 + CUDA 12.1 (适配 RTX 4090)
+# ============================================
+FROM pytorch/pytorch:2.1.0-cuda12.1-cudnn8-devel
 
-RUN echo 'debconf debconf/frontend select Noninteractive' | debconf-set-selections
+# 设置环境变量：防止安装交互卡死，设置时区
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=Asia/Shanghai
 
-# Install basics
-RUN apt-get update -y \
-    && apt-get install build-essential \
-    && apt-get install -y apt-utils git curl ca-certificates bzip2 tree htop wget \
-    && apt-get install -y libglib2.0-0 libsm6 libxext6 libxrender-dev bmon iotop g++ python3.7 python3.7-dev python3.7-distutils
+# 优化 APT 源 (可选，国内服务器推荐开启，海外服务器请注释掉)
+RUN sed -i 's/archive.ubuntu.com/mirrors.aliyun.com/g' /etc/apt/sources.list && \
+    sed -i 's/security.ubuntu.com/mirrors.aliyun.com/g' /etc/apt/sources.list
 
-# Install cmake v3.13.2
-RUN apt-get purge -y cmake && \
-    mkdir /root/temp && \
-    cd /root/temp && \
-    wget https://github.com/Kitware/CMake/releases/download/v3.13.2/cmake-3.13.2.tar.gz && \
-    tar -xzvf cmake-3.13.2.tar.gz && \
-    cd cmake-3.13.2 && \
-    bash ./bootstrap && \
-    make && \
-    make install && \
-    cmake --version && \
-    rm -rf /root/temp
+# 1. 安装系统级依赖 (OpenCV, nuScenes, 编译工具必备)
+RUN apt-get update && apt-get install -y \
+    git \
+    wget \
+    vim \
+    ninja-build \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender-dev \
+    && rm -rf /var/lib/apt/lists/*
 
-# Install python
-RUN ln -sv /usr/bin/python3.7 /usr/bin/python
-RUN wget https://bootstrap.pypa.io/get-pip.py && \
-	python get-pip.py && \
-	rm get-pip.py
+# 设置工作目录
+WORKDIR /workspace
 
-# Install python packages
-RUN PIP_INSTALL="python -m pip --no-cache-dir install" && \
-    $PIP_INSTALL numpy==1.19.3 llvmlite numba 
+# 2. 复制依赖清单并安装
+COPY requirements.txt /workspace/
 
-# Install torch and torchvision
-# See https://pytorch.org/ for other options if you use a different version of CUDA
-RUN pip install --user torch==1.6 torchvision==0.7.0 -f https://download.pytorch.org/whl/cu102/torch_stable.html
+# 3. 安装 Python 依赖
+# 技巧：使用清华源加速，且不使用缓存减小体积
+RUN pip install --no-cache-dir -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 
-# Install python packages
-RUN PIP_INSTALL="python -m pip --no-cache-dir install" && \
-    $PIP_INSTALL tensorboardX easydict pyyaml scikit-image tqdm SharedArray six
+# 4. 关键：安装适配 RTX 4090 的 spconv (稀疏卷积库)
+# 必须使用 cu120 版本，否则 PointPillars 会报错
+RUN pip install --no-cache-dir spconv-cu120 -i https://pypi.tuna.tsinghua.edu.cn/simple
 
-WORKDIR /root
+# 5. 安装 OpenMMLab 基础库 (BEV-MAE 等算法常用)
+RUN pip install --no-cache-dir openmim -i https://pypi.tuna.tsinghua.edu.cn/simple && \
+    mim install mmengine "mmcv>=2.0.0" "mmdet>=3.0.0" "mmdet3d>=1.0.0"
 
-# Install Boost geometry
-RUN wget https://jaist.dl.sourceforge.net/project/boost/boost/1.68.0/boost_1_68_0.tar.gz && \
-    tar xzvf boost_1_68_0.tar.gz && \
-    cp -r ./boost_1_68_0/boost /usr/include && \
-    rm -rf ./boost_1_68_0 && \
-    rm -rf ./boost_1_68_0.tar.gz 
-
-# A weired problem that hasn't been solved yet
-RUN pip uninstall -y SharedArray && \
-    pip install SharedArray
-
-RUN pip install spconv-cu102
+# 默认启动命令
+CMD ["/bin/bash"]

@@ -8,11 +8,12 @@ from tqdm import tqdm
 from ...ops.roiaware_pool3d import roiaware_pool3d_utils
 from ...utils import common_utils
 from ..dataset import DatasetTemplate
-
+# /home/ubuntu/SWW/code/BEV-MAE/tools/cfgs/dataset_configs/nuscenes_dataset.yaml
 
 class NuScenesDataset(DatasetTemplate):
     def __init__(self, dataset_cfg, class_names, training=True, root_path=None, logger=None):
-        root_path = (root_path if root_path is not None else Path(dataset_cfg.DATA_PATH)) / dataset_cfg.VERSION
+        # debug
+        root_path = (root_path if root_path is not None else Path(dataset_cfg.DATA_PATH)) # / dataset_cfg.VERSION
         super().__init__(
             dataset_cfg=dataset_cfg, class_names=class_names, training=training, root_path=root_path, logger=logger
         )
@@ -27,6 +28,8 @@ class NuScenesDataset(DatasetTemplate):
 
         for info_path in self.dataset_cfg.INFO_PATH[mode]:
             info_path = self.root_path / info_path
+            print(info_path)
+
             if not info_path.exists():
                 continue
             with open(info_path, 'rb') as f:
@@ -300,9 +303,9 @@ def create_nuscenes_info(version, data_path, save_path, max_sweeps=10):
     from nuscenes.nuscenes import NuScenes
     from nuscenes.utils import splits
     from . import nuscenes_utils
-    data_path = data_path / version
-    save_path = save_path / version
-
+    # No
+    # data_path = data_path /version
+    # save_path = save_path /version
     assert version in ['v1.0-trainval', 'v1.0-test', 'v1.0-mini']
     if version == 'v1.0-trainval':
         train_scenes = splits.train
@@ -315,7 +318,7 @@ def create_nuscenes_info(version, data_path, save_path, max_sweeps=10):
         val_scenes = splits.mini_val
     else:
         raise NotImplementedError
-
+    
     nusc = NuScenes(version=version, dataroot=data_path, verbose=True)
     available_scenes = nuscenes_utils.get_available_scenes(nusc)
     available_scene_names = [s['name'] for s in available_scenes]
@@ -357,18 +360,19 @@ if __name__ == '__main__':
 
     if args.func == 'create_nuscenes_infos':
         dataset_cfg = EasyDict(yaml.safe_load(open(args.cfg_file)))
+        # print(dataset_cfg)
         ROOT_DIR = (Path(__file__).resolve().parent / '../../../').resolve()
         dataset_cfg.VERSION = args.version
         create_nuscenes_info(
             version=dataset_cfg.VERSION,
-            data_path=ROOT_DIR / 'data' / 'nuscenes',
-            save_path=ROOT_DIR / 'data' / 'nuscenes',
+            data_path=Path(dataset_cfg.DATA_PATH), #  /Home/SWW/data/nuscenes
+            save_path=Path(dataset_cfg.DATA_PATH),# ROOT_DIR / 'data' / 'nuscenes',
             max_sweeps=dataset_cfg.MAX_SWEEPS,
         )
-
+        
         nuscenes_dataset = NuScenesDataset(
             dataset_cfg=dataset_cfg, class_names=None,
-            root_path=ROOT_DIR / 'data' / 'nuscenes',
+            root_path=Path(dataset_cfg.DATA_PATH),# ROOT_DIR / 'data' / 'nuscenes',
             logger=common_utils.create_logger(), training=True
         )
         nuscenes_dataset.create_groundtruth_database(max_sweeps=dataset_cfg.MAX_SWEEPS)
