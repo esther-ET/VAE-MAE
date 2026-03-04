@@ -16,11 +16,12 @@ import torch
 
 from pcdet.config import cfg, cfg_from_yaml_file
 from pcdet.datasets import DatasetTemplate
+from pcdet.datasets.nuscenes import NuScenesDataset
 from pcdet.models import build_network, load_data_to_gpu
 from pcdet.utils import common_utils
 sys.path.append(str(Path(__file__).parent))
 
-class DemoDataset(DatasetTemplate):
+class NuScenesDataset(DatasetTemplate):
     def __init__(self, dataset_cfg, class_names, training=True, root_path=None, logger=None, ext='.bin'):
         """
         Args:
@@ -45,7 +46,7 @@ class DemoDataset(DatasetTemplate):
 
     def __getitem__(self, index):
         if self.ext == '.bin':
-            points = np.fromfile(self.sample_file_list[index], dtype=np.float32).reshape(-1, 4)
+            points = np.fromfile(self.sample_file_list[index], dtype=np.float32).reshape(-1, 5)
         elif self.ext == '.npy':
             points = np.load(self.sample_file_list[index])
         else:
@@ -59,7 +60,9 @@ class DemoDataset(DatasetTemplate):
         data_dict = self.prepare_data(data_dict=input_dict)
         return data_dict
 
-
+# /home/ubuntu/SWW/code/VAE-MAE/tools/demo.py
+# test pth : ~/SWW/data/pointpillar_7728.pth
+# test data: ~/SWW/data/nuscenes/v1.0-mini
 def parse_config():
     parser = argparse.ArgumentParser(description='arg parser')
     parser.add_argument('--cfg_file', type=str, default='cfgs/kitti_models/second.yaml',
@@ -106,7 +109,6 @@ def main():
                 mlab.show(stop=True)
 
     logger.info('Demo done.')
-# /home/ubuntu/SWW/code/BEV-MAE/tools/demo.py
 
 
 if __name__ == '__main__':

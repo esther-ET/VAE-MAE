@@ -8,7 +8,7 @@ from tqdm import tqdm
 from ...ops.roiaware_pool3d import roiaware_pool3d_utils
 from ...utils import common_utils
 from ..dataset import DatasetTemplate
-# /home/ubuntu/SWW/code/BEV-MAE/tools/cfgs/dataset_configs/nuscenes_dataset.yaml
+# /home/ubuntu/SWW/code/VAE-MAE/tools/cfgs/dataset_configs/nuscenes_dataset.yaml
 
 class NuScenesDataset(DatasetTemplate):
     def __init__(self, dataset_cfg, class_names, training=True, root_path=None, logger=None):

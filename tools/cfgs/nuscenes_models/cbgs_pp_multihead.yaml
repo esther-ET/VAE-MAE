@@ -22,6 +22,9 @@ DATA_CONFIG:
                 'train': 30000,
                 'test': 30000
             }
+            # 👇👇👇 新增以下两行 (从 nuscenes_dataset.yaml 抄过来的) 👇👇👇
+            VOXEL_SIZE_BEV: [0.8, 0.8, 8]
+            MAX_POINTS_PER_VOXEL_BEV: 10
 
 MODEL:
     NAME: PointPillar

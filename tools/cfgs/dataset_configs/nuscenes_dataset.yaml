@@ -1,5 +1,5 @@
 DATASET: 'NuScenesDataset'
-DATA_PATH: /mnt/nvme0n1p2/data/datasets/nuscenes #'/home/ubuntu/SWW/data/nuscenes'
+DATA_PATH: /data/nuscenes # /mnt/nvme0n1p2/data/datasets/nuscenes or #'/home/ubuntu/SWW/data/nuscenes'
 
 VERSION: 'v1.0-trainval' # 'v1.0-mini' 
 MAX_SWEEPS: 10
