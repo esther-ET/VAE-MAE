@@ -1,26 +1,45 @@
-*.pyc
-*.egg-info
-dist
-# datasets
-pytorch_env
-# models
-build
-correlation.egg-info
-checkpoints
-# runs/
-# *submission*/
-flow
-*.lzma
-ea_log/
+# ==========================================
+# 1. OpenPCDet Specific (Crucial)
+# ==========================================
+# Ignore datasets and heavy training outputs
+data/
+output/
 *.pth
+*.log
 
-submission
-# datasets
-ckpt
-output
-data
-run_181.sh
-pcdet/ops/
-tools/imgs/
-tools/scripts/
-calculate_average.py
+# Ignore compiled C++/CUDA binaries but KEEP the source code
+*.so
+*.o
+build/
+pcdet.egg-info/
+
+# ==========================================
+# 2. Python Environments & Cache
+# ==========================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg
+*.egg-info/
+.eggs/
+dist/
+.pip_cache/
+
+# Virtual Environments
+venv/
+env/
+.env/
+miniconda3/
+
+# ==========================================
+# 3. Jupyter Notebooks
+# ==========================================
+.ipynb_checkpoints/
+
+# ==========================================
+# 4. OS & IDE Files
+# ==========================================
+.idea/
+.vscode/
+*.swp
+.DS_Store
