@@ -2,8 +2,10 @@ import _init_path
 import argparse
 import datetime
 import glob
+import json
 import os
 import re
+import shutil
 import time
 from pathlib import Path
 
@@ -34,6 +36,9 @@ def parse_config():
 
     parser.add_argument('--max_waiting_mins', type=int, default=30, help='max waiting minutes')
     parser.add_argument('--start_epoch', type=int, default=0, help='')
+    parser.add_argument('--eval_epoch_interval', type=int, default=10, help='evaluate checkpoints every N epochs')
+    parser.add_argument('--topk_best_ckpt', type=int, default=3, help='keep top-k checkpoints by eval metric')
+    parser.add_argument('--best_metric', type=str, default='NDS', help='metric key used to rank checkpoints')
     parser.add_argument('--eval_tag', type=str, default='default', help='eval tag for this experiment')
     parser.add_argument('--eval_all', action='store_true', default=False, help='whether to evaluate all checkpoints')
     parser.add_argument('--ckpt_dir', type=str, default=None, help='specify a ckpt directory to be evaluated if needed')
@@ -78,9 +83,135 @@ def get_no_evaluated_ckpt(ckpt_dir, ckpt_record_file, args):
         epoch_id = num_list[-1]
         if 'optim' in epoch_id:
             continue
-        if float(epoch_id) not in evaluated_ckpt_list and int(float(epoch_id)) >= args.start_epoch:
+        epoch_int = int(float(epoch_id))
+        if epoch_int < args.start_epoch:
+            continue
+        if args.eval_epoch_interval > 1 and epoch_int % args.eval_epoch_interval != 0:
+            continue
+        if float(epoch_id) not in evaluated_ckpt_list:
             return epoch_id, cur_ckpt
     return -1, None
+
+
+def _best_record_path(eval_output_dir):
+    return eval_output_dir / 'best_ckpt_record.json'
+
+
+def _load_best_records(record_path):
+    if not record_path.exists():
+        return []
+    try:
+        with open(record_path, 'r') as f:
+            data = json.load(f)
+        if isinstance(data, list):
+            return data
+    except Exception:
+        return []
+    return []
+
+
+def _save_best_records(record_path, records):
+    with open(record_path, 'w') as f:
+        json.dump(records, f, indent=2)
+
+
+def _extract_metric_value(tb_dict, metric_name):
+    if metric_name in tb_dict:
+        return float(tb_dict[metric_name])
+
+    # Fallback for case-insensitive key matches.
+    lower_to_key = {str(k).lower(): k for k in tb_dict.keys()}
+    metric_lower = metric_name.lower()
+    if metric_lower in lower_to_key:
+        return float(tb_dict[lower_to_key[metric_lower]])
+    return None
+
+
+def _safe_metric_token(metric_name):
+    return re.sub(r'[^0-9a-zA-Z_.-]+', '_', str(metric_name))
+
+
+def _update_topk_best_ckpts(eval_output_dir, ckpt_dir, cur_ckpt, cur_epoch_id,
+                            metric_name, metric_value, topk, eval_epoch_interval, logger):
+    topk = max(int(topk), 0)
+    if topk == 0:
+        return
+
+    record_path = _best_record_path(eval_output_dir)
+    records = _load_best_records(record_path)
+
+    # Remove stale files from historical records.
+    valid_records = []
+    for item in records:
+        ckpt_path = item.get('ckpt_path', '')
+        if ckpt_path and os.path.exists(ckpt_path):
+            valid_records.append(item)
+    records = valid_records
+
+    cur_item = {
+        'epoch': int(float(cur_epoch_id)),
+        'metric_name': metric_name,
+        'metric_value': float(metric_value),
+        'ckpt_path': str(cur_ckpt),
+    }
+
+    replaced = False
+    for idx, item in enumerate(records):
+        if item.get('ckpt_path', '') == str(cur_ckpt):
+            records[idx] = cur_item
+            replaced = True
+            break
+    if not replaced:
+        records.append(cur_item)
+
+    records.sort(key=lambda x: float(x.get('metric_value', float('-inf'))), reverse=True)
+    keep_records = records[:topk]
+    keep_paths = {item['ckpt_path'] for item in keep_records}
+
+    # Keep only top-k candidate checkpoints in ckpt_dir.
+    ckpt_pattern = os.path.join(str(ckpt_dir), 'checkpoint_epoch_*.pth')
+    current_epoch = int(float(cur_epoch_id))
+    for ckpt_path in glob.glob(ckpt_pattern):
+        matched = re.findall(r'checkpoint_epoch_(.*)\.pth', os.path.basename(ckpt_path))
+        if len(matched) == 0:
+            continue
+        try:
+            epoch_int = int(float(matched[-1]))
+        except ValueError:
+            continue
+
+        # Never remove future checkpoints that are not evaluated yet.
+        if epoch_int > current_epoch:
+            continue
+        if eval_epoch_interval > 1 and epoch_int % eval_epoch_interval != 0:
+            continue
+
+        if ckpt_path not in keep_paths:
+            try:
+                os.remove(ckpt_path)
+            except OSError as err:
+                logger.warning('Failed to remove ckpt %s: %s', ckpt_path, err)
+
+    # Mirror top-k files into a dedicated folder for quick access.
+    best_dir = Path(ckpt_dir) / 'best_ckpt'
+    best_dir.mkdir(parents=True, exist_ok=True)
+    for file_path in best_dir.glob('*.pth'):
+        try:
+            file_path.unlink()
+        except OSError:
+            pass
+
+    safe_metric_name = _safe_metric_token(metric_name)
+    for rank, item in enumerate(keep_records, start=1):
+        src = Path(item['ckpt_path'])
+        if not src.exists():
+            continue
+        dst = best_dir / f'top{rank}_epoch_{item["epoch"]}_{safe_metric_name}_{item["metric_value"]:.4f}.pth'
+        shutil.copy2(str(src), str(dst))
+
+    _save_best_records(record_path, keep_records)
+    logger.info('Top-%d best checkpoints by %s: %s', topk, metric_name,
+                ', '.join([f"epoch {x['epoch']} ({x['metric_value']:.4f})" for x in keep_records]))
 
 
 def repeat_eval_ckpt(model, test_loader, args, eval_output_dir, logger, ckpt_dir, dist_test=False):
@@ -121,6 +252,24 @@ def repeat_eval_ckpt(model, test_loader, args, eval_output_dir, logger, ckpt_dir
             cfg, model, test_loader, cur_epoch_id, logger, dist_test=dist_test,
             result_dir=cur_result_dir, save_to_file=args.save_to_file
         )
+
+        if cfg.LOCAL_RANK == 0:
+            metric_value = _extract_metric_value(tb_dict, args.best_metric)
+            if metric_value is None:
+                logger.warning('Metric "%s" not found in eval result keys: %s. Skip top-k checkpoint update.',
+                               args.best_metric, sorted(tb_dict.keys()))
+            else:
+                _update_topk_best_ckpts(
+                    eval_output_dir=eval_output_dir,
+                    ckpt_dir=ckpt_dir,
+                    cur_ckpt=cur_ckpt,
+                    cur_epoch_id=cur_epoch_id,
+                    metric_name=args.best_metric,
+                    metric_value=metric_value,
+                    topk=args.topk_best_ckpt,
+                    eval_epoch_interval=max(1, args.eval_epoch_interval),
+                    logger=logger
+                )
 
         if cfg.LOCAL_RANK == 0:
             for key, val in tb_dict.items():

@@ -89,8 +89,12 @@ def train_one_epoch(model, optimizer, train_loader, model_func, lr_scheduler, ac
 def train_model(model, optimizer, train_loader, model_func, lr_scheduler, optim_cfg,
                 start_epoch, total_epochs, start_iter, rank, tb_log, ckpt_save_dir, train_sampler=None,
                 lr_warmup_scheduler=None, ckpt_save_interval=1, max_ckpt_save_num=50,
-                merge_all_iters_to_one_epoch=False):
+                merge_all_iters_to_one_epoch=False, 
+                test_loader=None, eval_func=None, eval_interval=10, topk=3, best_metric='NDS'):
+    
     accumulated_iter = start_iter
+    best_ckpts = []  # List to track tuples of (metric_score, ckpt_path)
+    
     with tqdm.trange(start_epoch, total_epochs, desc='epochs', dynamic_ncols=True, leave=(rank == 0)) as tbar:
         total_it_each_epoch = len(train_loader)
         if merge_all_iters_to_one_epoch:
@@ -119,21 +123,47 @@ def train_model(model, optimizer, train_loader, model_func, lr_scheduler, optim_
                 dataloader_iter=dataloader_iter
             )
 
-            # save trained model
+            # save trained model and evaluate
             trained_epoch = cur_epoch + 1
             if trained_epoch % ckpt_save_interval == 0 and rank == 0:
-
-                ckpt_list = glob.glob(str(ckpt_save_dir / 'checkpoint_epoch_*.pth'))
-                ckpt_list.sort(key=os.path.getmtime)
-
-                if ckpt_list.__len__() >= max_ckpt_save_num:
-                    for cur_file_idx in range(0, len(ckpt_list) - max_ckpt_save_num + 1):
-                        os.remove(ckpt_list[cur_file_idx])
-
                 ckpt_name = ckpt_save_dir / ('checkpoint_epoch_%d' % trained_epoch)
                 save_checkpoint(
                     checkpoint_state(model, optimizer, trained_epoch, accumulated_iter), filename=ckpt_name,
                 )
+
+                # Execute Evaluation and Top-K logic
+                if test_loader is not None and eval_func is not None and trained_epoch % eval_interval == 0:
+                    model.eval()
+                    with torch.no_grad():
+                        result_dict = eval_func(model, test_loader)
+                    model.train()
+                    
+                    # Extract the metric (e.g., NDS)
+                    current_score = result_dict.get(best_metric, 0.0)
+                    saved_ckpt_path = f"{ckpt_name}.pth"
+                    
+                    best_ckpts.append((current_score, saved_ckpt_path))
+                    best_ckpts.sort(key=lambda x: x[0], reverse=True) # Sort highest to lowest
+                    
+                    # If we have more than Top-K best models, remove the worst one
+                    if len(best_ckpts) > topk:
+                        worst_score, worst_ckpt_path = best_ckpts.pop(-1)
+                        if os.path.exists(worst_ckpt_path):
+                            os.remove(worst_ckpt_path)
+                            
+                else:
+                    # Default sequential deletion (if not evaluating this epoch)
+                    ckpt_list = glob.glob(str(ckpt_save_dir / 'checkpoint_epoch_*.pth'))
+                    ckpt_list.sort(key=os.path.getmtime)
+                    
+                    # Protect the Top-K best checkpoints from being deleted by the default logic
+                    best_ckpt_paths = [ckpt[1] for ckpt in best_ckpts]
+                    ckpt_list = [ckpt for ckpt in ckpt_list if ckpt not in best_ckpt_paths]
+
+                    if len(ckpt_list) > max_ckpt_save_num:
+                        for cur_file_idx in range(0, len(ckpt_list) - max_ckpt_save_num):
+                            if os.path.exists(ckpt_list[cur_file_idx]):
+                                os.remove(ckpt_list[cur_file_idx])
 
 
 def model_state_to_cpu(model_state):
