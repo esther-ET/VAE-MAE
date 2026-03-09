@@ -4,12 +4,12 @@ import datetime
 import glob
 import os
 from pathlib import Path
-from test import repeat_eval_ckpt, eval_single_ckpt  # Added eval_one_epoch here
 
 import torch
 import torch.nn as nn
 from tensorboardX import SummaryWriter
 
+from eval_utils import eval_utils
 from pcdet.config import cfg, cfg_from_list, cfg_from_yaml_file, log_config_to_file
 from pcdet.datasets import build_dataloader
 from pcdet.models import build_network, model_fn_decorator
@@ -34,7 +34,7 @@ def parse_config():
     parser.add_argument('--fix_random_seed', action='store_true', default=False, help='')
     parser.add_argument('--ckpt_save_interval', type=int, default=1, help='number of training epochs')
     parser.add_argument('--local_rank', type=int, default=0, help='local rank for distributed training')
-    parser.add_argument('--max_ckpt_save_num', type=int, default=3, help='max number of saved checkpoints before best-topk filtering')
+    parser.add_argument('--max_ckpt_save_num', type=int, default=5, help='max number of saved regular checkpoints')
     parser.add_argument('--merge_all_iters_to_one_epoch', action='store_true', default=False, help='')
     parser.add_argument('--set', dest='set_cfgs', default=None, nargs=argparse.REMAINDER,
                         help='set extra config keys if needed')
@@ -42,8 +42,8 @@ def parse_config():
     parser.add_argument('--max_waiting_mins', type=int, default=0, help='max waiting minutes')
     parser.add_argument('--start_epoch', type=int, default=0, help='')
     parser.add_argument('--num_epochs_to_eval', type=int, default=0, help='number of checkpoints to be evaluated')
-    parser.add_argument('--eval_epoch_interval', type=int, default=10, help='evaluate checkpoints every N epochs')
-    parser.add_argument('--topk_best_ckpt', type=int, default=3, help='keep top-k checkpoints by eval metric')
+    parser.add_argument('--eval_epoch_interval', type=int, default=5, help='evaluate checkpoints every N epochs')
+    parser.add_argument('--topk_best_ckpt', type=int, default=2, help='keep top-k checkpoints in best_ckpt folder')
     parser.add_argument('--best_metric', type=str, default='NDS', help='metric key used to rank checkpoints')
     parser.add_argument('--save_to_file', action='store_true', default=False, help='')
 
@@ -82,9 +82,13 @@ def main():
         common_utils.set_random_seed(666 + cfg.LOCAL_RANK)
 
     output_dir = cfg.ROOT_DIR / 'output' / cfg.EXP_GROUP_PATH / cfg.TAG / args.extra_tag
+    
+    # Create both ckpt and best_ckpt directories
     ckpt_dir = output_dir / 'ckpt'
+    best_ckpt_dir = output_dir / 'best_ckpt'
     output_dir.mkdir(parents=True, exist_ok=True)
     ckpt_dir.mkdir(parents=True, exist_ok=True)
+    best_ckpt_dir.mkdir(parents=True, exist_ok=True)
 
     log_file = output_dir / ('log_train_%s.txt' % datetime.datetime.now().strftime('%Y%m%d-%H%M%S'))
     logger = common_utils.create_logger(log_file, rank=cfg.LOCAL_RANK)
@@ -164,8 +168,9 @@ def main():
     eval_output_dir.mkdir(parents=True, exist_ok=True)
     
     def model_eval_wrapper(eval_model, dataloader):
-        ret_dict, _, _ = eval_single_ckpt(
-            cfg, eval_model, dataloader, epoch_id=0, logger=logger, dist_test=dist_train,
+        eval_model_to_use = eval_model.module if isinstance(eval_model, nn.parallel.DistributedDataParallel) else eval_model
+        ret_dict = eval_utils.eval_one_epoch(
+            cfg, eval_model_to_use, dataloader, epoch_id=0, logger=logger, dist_test=dist_train,
             result_dir=eval_output_dir, save_to_file=False
         )
         return ret_dict
@@ -191,12 +196,13 @@ def main():
         ckpt_save_interval=args.ckpt_save_interval,
         max_ckpt_save_num=args.max_ckpt_save_num,
         merge_all_iters_to_one_epoch=args.merge_all_iters_to_one_epoch,
-        # New Evaluation Arguments
+        # New Evaluation and Best Ckpt Arguments
         test_loader=test_loader,
         eval_func=model_eval_wrapper,
         eval_interval=args.eval_epoch_interval,
         topk=args.topk_best_ckpt,
-        best_metric=args.best_metric
+        best_metric=args.best_metric,
+        best_ckpt_save_dir=best_ckpt_dir
     )
 
     if hasattr(train_set, 'use_shared_memory') and train_set.use_shared_memory:
