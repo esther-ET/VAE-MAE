@@ -1,6 +1,4 @@
-# BEV-MAE: Bird's Eye View Masked Autoencoders for Point Cloud Pre-training in Autonomous Driving Scenarios
-
-This is the official implementation of [BEV-MAE](https://arxiv.org/abs/2212.05758).
+# This is a repo forked from the official implementation of [BEV-MAE](https://arxiv.org/abs/2212.05758).
 
 
 
@@ -56,3 +54,21 @@ If BEV-MAE is useful or relevant to your research, please kindly recognize our c
 If you have any problem about this work, please feel free to reach us out at `zwlin@pku.edu.cn`.
 
 The project is only free for academic research purposes, but needs authorization for commerce. For commerce permission, please contact `wyt@pku.edu.cn`.
+
+
+## Others
+
+for yaml:
+```python
+DATA_CONFIG:
+    DATASET: 'PairedNuScenesDataset'
+    WEATHER:
+        PREGENERATED_PATH: /path/to/weather_nuscenes/rain/
+        WEATHER_TYPE: 'rain'          # rain / snow / fog / random
+        CORRUPT_SWEEPS: False         # 是否也对 sweep 做天气模拟
+        ONLINE_SIM:
+            ENABLED: False
+            RAIN_RATE: [1.0, 50.0]
+            SNOW_RATE: [1.0, 50.0]
+            FOG_VISIBILITY: [50, 1000]
+```
