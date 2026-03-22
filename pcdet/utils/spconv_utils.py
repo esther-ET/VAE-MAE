@@ -24,7 +24,7 @@ def find_all_spconv_keys(model: nn.Module, prefix="") -> Set[str]:
 
     return found_keys
 
-
+# 返回一个 带新特征 的稀疏张量 2.0的特点
 def replace_feature(out, new_features):
     if "replace_feature" in out.__dir__():
         # spconv 2.x behaviour

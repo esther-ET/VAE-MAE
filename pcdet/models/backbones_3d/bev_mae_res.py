@@ -55,6 +55,7 @@ class BEV_MAE_res(nn.Module):
     def __init__(self, model_cfg, input_channels, grid_size, **kwargs):
         super().__init__()
         self.model_cfg = model_cfg
+        # 绑定作用：以后每次调用 norm_fn(通道数)，就等于创建nn.BatchNorm1d(通道数, eps=1e-3, momentum=0.01)
         norm_fn = partial(nn.BatchNorm1d, eps=1e-3, momentum=0.01)
         
         self.mask_ratio = model_cfg.MASKED_RATIO

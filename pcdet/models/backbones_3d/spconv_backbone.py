@@ -52,7 +52,7 @@ class SparseBasicBlock(spconv.SparseModule):
         identity = x
 
         out = self.conv1(x)
-        out = replace_feature(out, self.bn1(out.features))
+        out = replace_feature(out, self.bn1(out.features)) # out更新为self.bn1(out.features)
         out = replace_feature(out, self.relu(out.features))
 
         out = self.conv2(out)
@@ -186,6 +186,7 @@ class VoxelResBackBone8x(nn.Module):
     def __init__(self, model_cfg, input_channels, grid_size, **kwargs):
         super().__init__()
         self.model_cfg = model_cfg
+        # 绑定作用：以后每次调用 norm_fn(通道数)，就等于创建nn.BatchNorm1d(通道数, eps=1e-3, momentum=0.01)
         norm_fn = partial(nn.BatchNorm1d, eps=1e-3, momentum=0.01)
 
         self.sparse_shape = grid_size[::-1] + [1, 0, 0]
@@ -197,7 +198,7 @@ class VoxelResBackBone8x(nn.Module):
             norm_fn(16),
             nn.ReLU(),
         )
-        block = post_act_block
+        block = post_act_block # spconv的某一种
 
         self.conv1 = spconv.SparseSequential(
             SparseBasicBlock(16, 16, norm_fn=norm_fn, indice_key='res1'),

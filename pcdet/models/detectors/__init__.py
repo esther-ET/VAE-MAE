@@ -12,6 +12,7 @@ from .pv_rcnn_plusplus import PVRCNNPlusPlus
 
 from .detector3d_template_bev_mae import Detector3DTemplate_bev_mae
 from .bev_mae_net import BEV_MAE
+from .siamese_weather_detector import SiameseWeatherDetector
 
 
 __all__ = {
@@ -28,6 +29,7 @@ __all__ = {
     'PVRCNNPlusPlus': PVRCNNPlusPlus,
     'Detector3DTemplate_bev_mae': Detector3DTemplate_bev_mae,
     'BEV_MAE': BEV_MAE,
+    'SiameseWeatherDetector': SiameseWeatherDetector,
 }
 
 
