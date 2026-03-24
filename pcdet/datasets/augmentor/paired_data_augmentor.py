@@ -31,6 +31,7 @@ class PairedDataAugmentor(DataAugmentor):
             gt_boxes_mask_backup = data_dict.get('gt_boxes_mask', None)
             if gt_boxes_mask_backup is not None:
                 gt_boxes_mask_backup = gt_boxes_mask_backup.copy()
+            # 记录增强状态
             rng_state = np.random.get_state()
 
         for cur_augmentor in self.data_augmentor_queue:
@@ -50,8 +51,9 @@ class PairedDataAugmentor(DataAugmentor):
             if 'gt_boxes2d' in data_dict:
                 data_dict['gt_boxes2d'] = data_dict['gt_boxes2d'][gt_boxes_mask]
             data_dict.pop('gt_boxes_mask')
-
+        # 对有weather的进行和clear的一样的操作
         if has_weather:
+            # 重放rng状态的增强
             np.random.set_state(rng_state)
 
             weather_dict = {
