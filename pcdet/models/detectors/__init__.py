@@ -9,6 +9,8 @@ from .caddn import CaDDN
 from .voxel_rcnn import VoxelRCNN
 from .centerpoint import CenterPoint
 from .pv_rcnn_plusplus import PVRCNNPlusPlus
+from .transfusion import TransFusion
+from .voxelnext import VoxelNeXt
 
 from .detector3d_template_bev_mae import Detector3DTemplate_bev_mae
 from .bev_mae_net import BEV_MAE
@@ -27,6 +29,8 @@ __all__ = {
     'VoxelRCNN': VoxelRCNN,
     'CenterPoint': CenterPoint,
     'PVRCNNPlusPlus': PVRCNNPlusPlus,
+    'TransFusion': TransFusion,
+    'VoxelNeXt': VoxelNeXt,
     'Detector3DTemplate_bev_mae': Detector3DTemplate_bev_mae,
     'BEV_MAE': BEV_MAE,
     'SiameseWeatherDetector': SiameseWeatherDetector,
